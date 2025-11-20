@@ -13,35 +13,54 @@ namespace LegacyOrderProcessor
 
         public OrderProcessor(IDatabase database, IEmailService emailService)
         {
-            _database = database;
-            _emailService = emailService;
+            _database = database ?? throw new ArgumentNullException(nameof(database));
+            _emailService = emailService ?? throw new ArgumentNullException(nameof(emailService));
         }
 
         public bool ProcessOrder(Order order)
         {
-            if (order == null) throw new ArgumentNullException(nameof(order));
-            if (order.TotalAmount <= 0) return false;
+            if (order == null)
+                throw new ArgumentNullException(nameof(order));
 
-            if (!_database.IsConnected)
-            {
-                _database.Connect();
-            }
+            if (!IsOrderAmountValid(order))
+                return false;
+
+            EnsureDatabaseConnected();
 
             try
             {
-                _database.Save(order);
-                if (order.TotalAmount > 100)
-                {
-                    _emailService.SendOrderConfirmation(order.CustomerEmail, order.Id);
-                }
-                order.IsProcessed = true;
+                SaveOrder(order);
+                SendEmailIfNeeded(order);
+                MarkOrderProcessed(order);
                 return true;
             }
-            catch (Exception)
+            catch
             {
                 return false;
             }
         }
+
+        private static bool IsOrderAmountValid(Order order)
+            => order.TotalAmount > 0;
+
+        private void EnsureDatabaseConnected()
+        {
+            if (!_database.IsConnected)
+                _database.Connect();
+        }
+
+        private void SaveOrder(Order order)
+            => _database.Save(order);
+
+        private void SendEmailIfNeeded(Order order)
+        {
+            if (order.TotalAmount > 100)
+                _emailService.SendOrderConfirmation(order.CustomerEmail, order.Id);
+        }
+
+        private static void MarkOrderProcessed(Order order)
+            => order.IsProcessed = true;
     }
+
 
 }
